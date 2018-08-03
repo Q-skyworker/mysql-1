@@ -1,0 +1,367 @@
+mysql视图----------虚拟表-----------假表
+
+优点：简单，安全，数据独立
+基表------不同用户对因不同首先值的视图
+视图使用：生产环境下，给不同的用户以不同的（数据）视图作为他们工作窗口。
+
+#######################################################
+
+视图的基本使用：
+创建：create view(视图必须创建在库中) 
+1) create view t1 as select name,shell from user where uid<=20
+
+2) create view db9.t2(student,stu_pass,stu_id) as select name, password , uid from db9.user limit 5;
+视图中的字段名，可改，但不可以重名
+
+查看：(哪些是视图表 哪些是物理表)
+show table status where comment="view"\G;
+查看视图的数据是哪个基表里的
+show   create  view  t1;
+
+ls /var/lib/mysql/db9/
+db.opt  t1.frm  user.frm  user.ibd---视图t1只有t1.frm
+
+使用视图：
+增删改查（基表与视图会同步更改，但是把视图删掉，基表不影响）
+drop---删掉
+insert
+alter
+select
+
+############################################################
+
+视图的完全格式
+
+创建视图时，必须给视图定义别名的情况
+视图中多表查询重名不可以
+
+create view usermix as select a.id ,name , shell from username as a ,useruid as b where a.id=b.id;(显示一个id)
+create view usermix as select a.id as aid,b.id as bid , name , shell from username as a ,useruid as b where a.id=b.id;(显示两个aid,bid)
+
+
+create or replicate 
+
+with （方式：local和cascaded）check option
+创建视图时，对时图表里的数据作操作时的限制方式，
+local: 满足视图本身的限制即可
+cascaded:同时满足基表的限制与视图的限制
+
+视图（下）：
+指定创建视图的检查方式
+在没有with check option 时默认使用的是：cascaded-模式
+--------cascaded:要满足自己的条件也要满足基表自身的条件（取交集）
+---------local:满足自身的条件即可，不需要满足基表的条件）（自身集合）
+		   但若超出基表的条件则修改的记录会消失(已经不符合视图表的创建条件，故从中除去)
+
+
+注意：在以下情况下怎样改都不行
+###########################################################3
+
+mysql中的脚本：
+>>数据库中保存的一系列 sql 命令的集合，存储过程---------------就是 MySQL 中的脚本
+
+存储过程（脚本）的优点：
+—避免重复的sql操作
+—防止对表的直接访问。
+– 提高性能
+– 可减轻网络负担
+---------------------------------------------------------------
+只在库中创建有效
+>>基本使用：
+delimiter //-------定义//分隔符
+create procedure---创建脚本
+()
+begin
+功能代码
+.....
+.....
+end
+//
+结束存储过程
+delimiter ;-------改回；分隔符
+
+
+delimiter +关键字   ----以关键字结束
+关键字声明当前段分隔符.   MySQL 默认以“ ;” 为分隔符,没有声明分割符,编译器会把存储过程当成 SQL 语句进行处理,则存储过程的编译过程会报错。
+写完后保存在数据库服务器上的一段代码
+
+********************************************************
+例子：
+mysql> delimiter //
+----------------------------------------
+创建储存
+mysql> create procedure say1()
+    -> begin
+    -> select * from db9.user;
+    -> select * from db9.user where name="mysql";
+    -> end 
+    -> //
+-------------------------------------
+mysql> delimiter ;
+
+mysql> call say1();------------调用函数
+
+***********************************************************
+查询存储过程：
+存储过程保存在mysql.proc下
+select db ,name, type from mysql.proc;
+select * from mysql.proc where name="say1"\G;
+
+
+***********************************************************
+删除存储过程：
+drop procedure say1;（不用加（）按查找的name中的名字）
+
+##############################
+编写功能代码时，可以使用变量条件 流量控制（if 循环 ）算术计算 sql命令
+
+变量的种类 : 全局变量 \ 会话变量 \ 用户变量 \ 局部变量
+会话变量      会话变量和全局变量叫系统变量 使用 set 命令定义;
+全局变量      全局变量的修改会影响到整个服务器,但是对会话变量的修改,只会影响到当前的会话。
+用户变量     在客户端连接到数据库服务的整个过程中都是有效的。当当前连接断开后所有用户变量失效。定义 set@ 变量名 = 值;
+              输出 select @ 变量名;
+局部变量     存储过程中的 begin/end 。其有效范围仅限于该语句块中,语句块执行完毕后,变量失效。declare 专门用来定义局部变量。
+
+
+mysql> show global variables; // 查看全局变量
+mysql> show session variables; // 查看会话变量
+mysql> set session sort_buffer_size = 40000; // 设置会话变量
+*******************************************************************
+
+自定义（会话）变量
+set @N=88;----->设置N=88;
+select @N;----->输出N值；参数类型
+
+局部变量：
+MySQL 存储过程,共有三种参数类型 IN,OUT,INOUT
+IN：输入型
+OUT：输出型
+INOUT:输入输出型
+
+Create procedure 名称 (
+类型 参数名 数据类型 
+类型 参数名 数据类型
+)
+若之前已经在函数名后面定义好，则在调用时参数不需要再加@
+只要（）里面有定义类新，必须有值才能执行----
+！@！问题：OUT类型在执行中是否每次都需要用一个完全没有关系的值来进行“激活”？？？
+若定义的时char(12)呢，也需要用一个字来“激活”？？在OUT类新的括号中一定要时一个有值的变量马？
+在输出OUT值时感觉使用非常复杂，不方便
+
+
++++++++++++++++++++++++++++++=
+例子
+mysql> create procedure say2()
+    -> begin
+    -> declare x int default 77;
+    -> declare y char(10);
+    -> set y="name";
+	select x;
+	select y;
+	end
+    -> //
+---------------------------------------------------------------
+mysql> create procedure test2(in USER char(20))
+    -> begin
+	select * from db9.user where name="USER";
+	end
+    -> //
+测试：
+call test("root")
+--------------------------------------------------
+mysql> create procedure test3(out num  int(2)
+    -> begin
+      > select num;
+	> set num=7;
+	>select num;
+	select count(*) into num from db9.user where shell!="/bin/bash";
+	select num;
+	end
+    -> //
+
+注意：out 类型每一个过程只能向外输出，而不去读取外面传给她的值
+--------------------------------------------------------
+mysql> create procedure test3(inout num  int(2)
+    -> begin
+      > select num;
+	set num=7;
+	select num;
+	select count(*) into num from db9.user where shell!="/bin/bash";
+	select num;
+	end
+    -> //
+inout 可以读取外面向内的，也可以对外传输
+
+***************************************
+将查询的值赋值给一个变量（下一次的赋值可以覆盖）
+
+select max(gid) into @x from db9.user;------查询结果into @x
+select @x----->输出结果
+***************************************
+运算
+
++    加法运算 SET @var1=2+2;
+-     减法运算 SET @var2=3-2;
+*     乘法运算 SET @var3=3*2 ;
+/     除法运算 SET @var4=10/3; 3.333333333
+DIV  整除运算 SET @var5=10  DIV 3; 3
+取模  SET @var6=10%3 ;
+
+mysql> set @x=1; set @y=2;set @z=@x*@y; select @z;
+
+###################################################
+
+流程控制
+
+顺序结构（IF）
+• 当“条件成立”时执行命令序列
+• 否则,不执行任何操作
+if [条件] then 
+   sql语句
+else 
+   sql语句
+end if；
+
+******************************************
+例子：
+drop procedure if exists say;
+
+mysql> create procedure say(in x int(1) )
+begin
+	if x <= 10 then  ------------->注意格式mysql> create procedure say()
+-> begin
+-> declare i int;
+-> set i=1;
+-> while i <= 5 do
+-> select i;
+-> set i=i+1;
+-> end while;
+-> end
+-> //
+	select * from userdb.user where id <=x;
+	end if;
+end
+//
+-----------------------------------------------------------------------
+mysql> create procedure t2(in num int(2))
+    -> begin
+    -> if num <= 50 then 
+    -> select num;
+    -> select * from db9.user where uid <=num ;
+    -> else
+    -> select * from db9.user where uid <=num and uid >=50;
+    -> end if;
+    -> end
+    -> //
+******************************************************
+循环结构（while）
+while 条件判断 do
+循环体
+.......
+end while ;
+------------------------------------------------------------------------------------
+mysql> create procedure say()
+-> begin
+-> declare i int;
+-> set i=1;
+-> while i <= 5 do
+-> select i;
+-> set i=i+1;
+-> end while;
+-> end
+-> //
+
+输出偶数----内部jk不用加@
+create procedure t3(in i int(2))
+      begin 
+	declare j int;
+	declare k int;
+      set j=1;
+      while j <= i do
+      set k=j*2;
+      select * from db9.user where uid = k ;
+      set j=j+1;
+      end while;
+      end
+       //
+---------------------------------------------------------
+无条件循环
+
+loop
+循环体
+......
+end loop ;
+
+mysql> create procedure say2( )
+-> begin
+-> declare i int;
+-> set i=1;
+-> loop
+-> select i;
+-> set i=i+1;
+-> end loop;
+-> end
+-> //
+-----------------------------------------------------------
+条件式循环
+– until 条件判断,成立时结束循环
+
+repeat
+循环体
+until 条件判断
+end repeat ;
+
+-> create procedure say3( )
+-> begin
+-> declare i int;
+-> set i=1;
+-> repeat-----------------------
+-> select i;
+-> set i=i+1;
+-> until i=6 // i=6时跳出循环;
+-> end repeat;
+-> end
+
+begin
+declare i int;
+set i=1;
+loop
+select i;
+set i=i+1;
+end loop;
+end
+//
+
+shell                           mysql
+-----------------------------------------------------------------------------------
+exit                      
+continue                       iterate
+break                          leave
+————————————————————————————-
+loop 的标签运用：
+create procedure say()
+begin
+-> declare i int;
+-> set i=1;
+-> loab1:loop // 定义标签名为 loab1----------【可以调用的loop
+-> select i;
+-> set i=i+1;
+-> if i=3 then #i 值是 3 时结束本次循环------------if【
+-> iterate loab1;-------------------------结束本次循环  有讲究，容易死循环，或卡住
+-> end if;
+-> if i=7 then #i 值是 7 时 结束循环
+-> leave loab1;---------------------------结束整个循环
+-> end if;-    -----------------------if】
+-> end loop;----------------------------loop整个循环】
+-> end
+
+脚本中的标签名字：
+标签名字：循环语句关键字
+label:while i <=10 do
+select i=i+1;---------------自加1
+if i=7 then
+iterate label1;-------------7跳票
+end if;
+select i;-------------------输出当前值（先后顺寻有讲究，容易以值在7中出不来）
+end while;
+

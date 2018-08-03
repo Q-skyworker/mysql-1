@@ -1,0 +1,249 @@
+MYSQL
+mysql工作原理：
+管理工具：mysql服务软件安装后提供的数据                                                 客户端
+   |
+连接池：看是否有空余的线程与资源响应服务请求                                         检测是否连接
+   |
+SQL-interface
+sql接口：把sql命令传递给数据库的进程进行处理                                         处理命令
+   |
+parser
+分析器：检查执行的sql命令是否有语法错误，是否有访问权限                              解析命令
+   |
+optimizer
+优化器（终极）：优化用户输入的sql命令，以最节省资源的方式运行------->看源码          优化查询
+  |
+查询缓存：存储查询过的查询结果，其空间从物理内存中划分一部分，用来存储查询结果      在缓存中查找
+  |
+存储引擎：软件自带的功能程序，是用来处理表的处理器                                   进入存储引擎查找
+  |
+文件系统：
+数据库的存储的数据地点：磁盘                                                          
+######################################################################################################
+注意：查询流程首先在缓存中找，找得到就立即返回，否则就再去存储引擎找---------->找到后返回时先放到缓存中，在返回客户端
+
+Mysql优化：
+1.数据库服务器处理客户端连接请求慢，可能是什么原因导致的？？
+----网速带宽不好
+----服务器的硬件配置----资源使用率CPU 内存 存储 磁盘的I/O（磁盘的读写速度）-----查看监控服务
+----提供的数据库服务软件版本低。
+----查看服务运行时的参数设置
+----编写的访问数据库的sql命令复杂(多从嵌套语句)导致处理速度慢。
+--- 数据架构问题，数据传输有瓶颈
+
+监视服务器状态，解决问题于发生之前，优化数据库并备份
+*************************************************
+查看变量的值：
+mysql> show variables;查看所有mysql参数
+mysql> show variables like "%seme%"-----查看特定的值
+Mysql 帮助手册
+mysql配置文件详解
+---------------------------------------------------------------
+并发连接控制：show variables like "conn%";
+
+***************************************
+修改变量的值：
+命令行修改：--set [global] 变量值=值;
+
+-------------------------------------------------------
+永久修改：
+/etc/my.cnf
+[mysqld]
+变量名=值
+
+
+********************************************
+max_connections：  允许的最大并发连接数
+M曾经有的最大连接/N并发连接数（设置的值）.=0.85
+曾经的最大连接：
+查看状态信息
+show global status like "%conn%"----最大连接数 max_connections
+一般还要留10%的空余
+计算公式：N=M/0.85 ; final=N*(1+0.1)
+---------------------------------------------------
+Threads_connected
+当前客户端已连接的数量。这个值会少于预设的值，但你也能监视到这个值较大，这可保证客户端是处在活跃状态。
+线程可重复使用9次----不用重新创建线程
+如vim 打开9张表，及开启9个线程--------------访问这9张表时别人直接通过缓存就可访问，而不需要从磁盘中寻找
+mysql---->t1.*------->内存(调入到内存)-------->cpu定期将表保存到硬盘里
+--------------------------------------------------------------------------------------
+key_buffer-size-----用于 MyISAM 引擎的关键索引缓存大小
+看所有与缓存相关的：show variables like "%cache%";-----query_cache
+查看查询缓存的设置：show variables like "query_cache%";----------query_cache_type =0|1|2 (类型2时查询必须加关键字 sql_in_cache,1为开启，0为关闭)
+
+内存中划分了200M.基本单元是nk（4K）等----故小的单元节省空间，大的单元查询快速
+
+query_cache_wlock_invalidate  off（防止幻读）
+当对myisam存储引擎的表查询时，若此时有客户端对表执行写操作,mysql不会从缓存中查找数据返回客户端，而是写结束后再从表中返回给客户端
+脏读：在查时，对表进行修改，导致信息不一致还是显示旧版本
+幻读：查找的数据与表中不一致
+
+Qcache_hits:   32
+若客户端发起连接请求，在响应请求时在缓存中找到的则自动+1
+Qcache_inserts 100
+受到的总查询请求
+查询命中率=Qcache_inserts/Qcache_hits----------->查询命中率小：缓存小需要扩大缓存
+Qcache_not_cache  没有放入的次数----------->cache的最大限制太小，导致文件访问受限
+***********************************************
+在数据库服务器上启用man查询日志，记录超过时间显示的查询结果sql命令
+binlog日志错误日志：  
+查询日志：记录所有的sql命令  在配置文件中加：general-log 重启  mysql下有主机名.log
+慢查询日志：
+[mysqld]
+slow-query-log                       //启动slow-log语句
+slow_query_log_file=mysql-slow.log   //重定向到slow.log
+log_queries_not_using_indexes=1      //记录未使用索引的查询
+
+##################################################################
+数据的读写分离：减轻单台服务器的压力
+把客户端查询请求与写请求，给不同的数据库服务器处理------数据的读写分离
+select---读
+insert/delete/update---写
+***************************************
+写库-----主
+读库-----从
+------------------------------------
+1.将100作为代理服务，写分给20，读分给10
+2.主从同步20为主，10为从
+-----------------------------------------------
+mysql -h192.168.4.100 -u -p 
+mysql>select------> 10
+mysql>insert------>20
+--------------------------------------------
+搭建好主从结构
+----------------------------------------------
+mysql中间件：mysql-proxy mycat maxscale
+在主库添加访问数据的连接用户并设置密码
+在100机上部署代理服务，用maxscale实现数据读写分离
+
+
+装包
+cp /etc/maxscale.cnf  /etc/maxscale.cnf.bak
+改配置文件/etc/maxscale.cnf,并根据设置在数据库上配置对应的用户scalemon(监视者),maxscale(监视访问自己(100)时主库与从库中是否有对应的用户)
+
+(1)增加一个[server],并更改address=
+(2)mysql Monitor--->servers=server1, server2 / 改user=scalemon
+(3)Read-Wirte Service---->servers=server1, server2 / 改user=maxscale
+在主库上执行就可以，从库自动同步
+1.grant replication slave,replication client on *.* to scalemon@'%' identified by "123456";
+2.grant select on mysql.* to maxscale@'%' identified by "123456";
+
+
+
+启动服务:      maxscale -f /etc/maxscale.cnf
+
+查看服务信息:  ss -untlp | grep maxscale
+
+测试：在100机上连接管理服务器查看监控信息
+     maxadmin -uadmin -pmariadb -P4099
+     MaxScale> list servers
+
+Server             | Address         | Port  | Connections | Status              
+
+server1            | 192.168.4.10    |  3306 |           0 | Master, Running
+server2            | 192.168.4.20    |  3306 |           0 | Slave, Running
+
+*******************************************************************************
+在100机上用授权用户yaya访问
+mysql -h192.168.4.100 -P4006 -uyaya -p123456
+三、mysql调优
+3.1 mysql体系结构 （由8个功能模块组成）：
+管理工具： 安装服务软件后，提供的命令 
+                                mysqldump  
+		mysqlbinlog
+		mysqladmin
+
+######################################################################
+3.3mysql调优
+
+3.3.1 如何优化mysql数据库服务器（那些原因会导致数据库服务器处理客户端的连接请求慢）
+A、硬件配置低，导致处理速度慢。 CPU  内存  存储磁盘
+                                                               接口   转速    15000/s
+uptime     free  -m      top  --> 0.0 wa
+
+b  、网络带宽窄   网络测速软件
+
+
+c 、提供服务软件的版本低，导致性能低下：
+1 查看服务运行时的参数配置   my.cnf
+mysql> show  variables;
+mysql> show  variables   like "%innodb%";
+2 常用参数：
+并发连接数量
+Max_used_connections/max_connections=0.85
+  500/x=0.85  * 100%   = 85%
+
+show  global  status  like "Max_used_connections";
+set  global   max_connections  =   数字；
+
+连接超时时间
+show   variables   like   "%timeout%";
+connect_timeout  客户端与服务器建立连接时tcp三次握手超时是时间
+wait_timeout  户端与服务器建立连接后，等待执行sql命令的超时时间。
+
+
+可以重复使用的线程的数量  thread
+show   variables   like   "%thread%";
+thread_cache_size = 9
+
+所有线程同时打开表的数量
+show   variables   like   "%open%";
+table_open_cache
+
+mysqld  -----> disk ---->x.ibd ----> memory  ----> disk
+
+与查询相关参数的设置  (字节)   mysqld
+select   *  from   t1;   read_buffer_size
+
+select   *  from   t1  order  by   字段名;sort_buffer_size
+
+
+select   *  from   t1  group  by   字段名;read_rnd_buffer_size
+name ----> index
+select  * from  t1  where  name="jim"; key_buffer-size  
+
+
+与查询缓存相关参数的设置
+show   variables   like   "%cache%";
+show   variables   like   "query_cache%";
+
+query_cache_wlock_invalidate | OFF  关
+当对myisam存储引擎的表执行查询时，若检查到有对表做写de sql操作,不从查询缓存里查询数据返回给客户端，而是
+
+等写操作完成后，重新查询数据返回给客户端。
+
+pc1   select    name  from t1  where name="bob";
+                   cache --->  name=bob
+
+pc2 select    name  from t1  where name="bob";
+     mysqld->  name= bob;
+
+pc3  update  t1  set  name="jack" wehre  name="bob";
+
+查看查询缓存的统计信息：
+show   global   status   like   "qcache%";
+Qcache_hits        10     记录在查询缓存里查询到数据的次数     
+Qcache_inserts   100   记录在查询缓存里查找数据的次数  
+Qcache_lowmem_prunes    清理查询缓存空间的次数
+
+3 修改服务运行时的参数：
+3.1 命令行设置，临时生效。
+mysql>  set   [global]  变量名=值；
+
+3.2在配置文件里设置永久生效:
+vim /etc/my.cnf
+[mysqld]
+变量名=值
+:wq
+
+4、程序编写sql查询语句太复杂导致，数据库服务器处理速度慢。
+开启数据库服务器的慢查询日志，记录超过指定时间显示查询结果的sql命令。                                           10s
+
+4.1 mysql数据库服务日志类型：
+错误日志  默认开启 记录服务在启动和运行过程中产生的错误信息log-error=/var/log/mysqld.log
+binlog日志 又被称作二进制日志：
+慢查询日志： 记录超过指定时间显示查询结果的sql命令
+查询日志： 记录所有sql命令。
+5、网络架构有问题（有数据传输瓶颈） 
+
+

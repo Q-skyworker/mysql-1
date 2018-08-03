@@ -1,0 +1,247 @@
+DBA初级知识总结：
+1.mysql装包
+2.mysql初次更改密码与用户授权
+3.mysql创建库，表，记录，字段的增删改查
+4.mysql的导入与导出
+5.mysql数据筛选
+
+#########################################
+
+1.mysql装包
+配置文件  /etc/my.cnf
+数据库目录  /var/lib/mysql/
+
+
+解压---装包----启动服务----查看确认
+tar -xf 
+rpm  -Uvh    mysql-community-*.rpm
+
+##########################################
+
+2.mysql初次更改密码与用户授权
+
+2.1查看初始密码（5.7版本）进入mysql
+#grep  password  /var/log/mysqld.log-------》k2T_SH0Jx%MB
+mysql -hlocalhost -uroot -p'k2T_SH0Jx%MB'
+
+2.2更改密码：（更改权限为简单，密码长度6）
+mysql> set global validate_password_policy=0; 
+mysql> set global validate_password_length=6;
+mysql> alter user root@"localhost" identified by "123456";
+
+永久设置：
+vim /etc/my.cnf
+validate_password_policy=0; 
+validate_password_length=6;
+重启服务
+#########################################################
+忘记root密码：
+修改配置文件/etc/my.cnf
+[mysqld]
+加：skip-grant-tables
+重启服务
+#mysql进入
+修改好密码
+改回配置文件并重启
+
+更改密码：
+>update mysql.user set authentication_string=password('123qwe') where user='root' and Host = 'localhost';
+
+3.mysql创建库，表，记录，字段的增删改查
+3.1增
+3.1.1创建：
+创建数据库
+create database t1;
+创建数据表：
+	create tables t1(
+	name char(15),
+	class char(7)
+	);
+3.1.2表中插入一个记录（行）
+	insert into 表名 values (记录1),(记录2);
+
+3.1.3alter table 表名 add -----增加字段（列）
+对表中添加一字段（列）
+alter table user add
+    -> id int(2) primary key  ---主键设置
+    -> auto_increment         ---自动增加
+    -> first;                 ---增加位置
+
+3.2删除
+drop  database/table;  库名.表名-----删除库或表
+delete from 表名 where A;--------删除复合条件A 的行，若无条件则删除整张表内容
+alter table 表名 drop 字段名----------删除表中的字段（列）
+
+3.3改
+
+alter table 表名 modify ------只能改类型，约束， 不能改名字
+alter table 表名 change ------修改后字段名称 数据类型
+alter table 表名 rename-------重新命名表名
+update 表名 set 字段="nsd1809";---改字段中的内容
+
+示例
+
+更改字段（列）的类型，只能改类型，约束， 不能改名字
+alter table user modify
+    -> uid int(2),
+    -> modify gid int(2);
+
+重新命名表名
+alter table   t15 
+    ->rename stuinfo;
+
+对表中--------某条记录中的-------某字段内容修改
+update 表名 set 字段名（列名）="XXX" where 筛选记录（行号）;
+
+3.4查
+show databases/tables;
+
+
+*记录类型：
+1.类型
+int
+tinyint
+smallint
+mediumint
+bigint
+largeint
+
+varchar--可变长度
+char-----固定长
+text----大文本文件
+
+enum --- 单选
+set  --- 多选
+
+2.时间函数：
+使用方法同date----now()
+mysql> select date(now());---- 日期   -----datetime-----  8字节
+mysql> select year(now());---- 年    -------date----4字节
+mysql> select month(now());----月    ------time---3字节
+mysql> select day(now());      日    
+
+3，zerofill/not null(不允许为空)/default(默认值)
+
+4.MySQL键值
+------------------------------------------------
+普通索引  index  *    ------（Btree ,B+tree,Hash算法）
+唯一索引  unique
+主键       primary key  *
+外键	   foreign  key *  name（名）  refrence  t2(字段名)------------>name只能在t2字段中进行选择
+全文索引   fulltext
+----------------------------------------------
+例子：设置ygb在其中设置主键，并自动增加1
+mysql> create table ygb(
+yg_id int(2)primary key auto_increment,
+name char(10), 
+bumen char(20)
+)engine=innodb; 
+mysql> select * from ygb;
+-------------------------------------------------------------
+在gzb中增加外键---引用ygb中的yg_id
+create table gzb(
+    -> gz_id int(2),
+    -> name char(12),
+    -> pay float(8,2),
+    -> bumen char(12),
+    -> foreign key(gz_id) references ygb(yg_id)
+    -> on update cascade-----与ygb同步更新
+    -> on delete cascade-----与ygb同步删除
+    -> ) engine=innodb;------指定为innodb
+
+show create table gzb;
+insert into gzb values(1,"tom",45000,"design");
+insert into gzb values(2,"jack",55000.54,"design");
+同步更新/删除：
+update ygb set yg_id=9 where name="tom";
+delete from ygb where yg_id=2;
+---------------------------------------------------------------------------------------------------
+键完外键不允许为空或重复
+设置主键，可避免
+alter table gzb add primary key（yg_id）;
+
+delete from ygb;全部删除内容
+删除外键：
+alter table gzb drop foreign key gzb_ibfk_1;(show create table gzb---查看约束key)
+
+############################################################
+
+mysql引擎查询：
+看你的mysql现在已提供什么存储引擎:
+	mysql> show engines; 
+看你的mysql当前默认的存储引擎:
+	mysql> show variables like '%storage_engine%'; 
+你要看某个表用了什么引擎(在显示结果里参数engine后面的就表示该表当前用的存储引擎):
+	mysql> show create table 表名
+
+mysql的存储引擎包括：MyISAM、InnoDB、BDB、MEMORY、MERGE、EXAMPLE、NDBCluster、ARCHIVE、CSV、BLACKHOLE、FEDERATED等，其中InnoDB和BDB提供事务安全表，其他存储引擎都是非事务安全表
+
+最常使用的2种存储引擎:
+1.Myisam是Mysql的默认存储引擎，当create创建新表时，未指定新表的存储引擎时，默认使用Myisam。每个MyISAM在磁盘上存储成三个文件。文件名都和表名相同，扩展名分别是.frm（存储表定义）、.MYD(MYData，存储数据)、.MYI(MYIndex，存储索引)。数据文件和索引文件可以放置在不同的目录，平均分布io，获得更快的速度。
+2.InnoDB(5.5后是默认储存引擎)存储引擎提供了具有提交、回滚和崩溃恢复能力的事务安全。但是对比Myisam的存储引擎，InnoDB写的处理效率差一些并且会占用更多的磁盘空间以保留数据和索引。
+
+
+##################################################################
+
+数据导入形式：
+数据的导入，导出
+/var/lib/mysql-files将文件放在下面可导入数据库
+
+1.在mysql中创建对应的表
+2.在mysql中执行系统命令：
+system + 命令
+3.导入时请确认源表以什么分割，以什么作为数据类型，一旦不匹配会失败
+4.导入数据到数据库
+mysql> load data infile "/var/lib/mysql-files/passwd" into table user fields terminated by ":" lines terminated by "\n";
+添加行号，便于表的阅读查阅：
+mysql> alter table user add
+    -> id int(2) primary key
+    -> auto_increment
+    -> first;
+****注意******
+在初次导入数据库时，导入数据一定要与见表的类型完全一一匹配
+只要导入数据不冲突，想导几遍导几遍
+-----------------------------------------------------------------------------------------------------------
+更改路径：
+配置文件/etc/my.cnf中加：
+secure_file_priv="/datadir"
+chown mysql /datadir（权限设定给mysql）
+getseliunx
+systemctl stop mysqld
+systemctl start mysqld
+修改路径后需要将导入的路径修改，并把表结构修改为源数据相通结构
+
+sql查询,并导出：
+– SELECT 查询 .. ..
+INTO OUTFILE “ 目录名 / 文件名”
+FIELDS TERMINATED BY “ 分隔符”------列之间
+LINES TERMINATED BY “\n”;----------行之间
+
+mysql> select * from user into outfile "/datadir/user.txt"(导入到默认的mysql文件夹中);
+
+mysql> select * from db1.user where uid<40 into outfile "/datadir/user4.txt" 
+       fields terminated by "---" 
+       lines terminated by "\n";
+
+########################################################################
+sql查询
+参看Day03
+———————————————————————————————————————————
+多表查询
+安装图形管理工具
+用户授权及权限撤销 *
++++++++++++++++++++++++++++++++++++++++++
+复制表:功能1：  备份表   功能2： 快速建表
+参看Day04
+##########################################################################
+Day05
+数据的备份与恢复：
+物理备份与；逻辑备份
+mysqldump备份
+1.启动mysql数据库服务的binlog日志文件 实现实时增量备份
+2.安装第3方软件提供备份命令，对数据做增量备份（innobackup）
+3.使用完全备份文件恢复单个表
+查看相关的文档
+Day06
+主从同步：
+参看Day06
